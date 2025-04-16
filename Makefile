@@ -436,3 +436,14 @@ check_shebang:
 
 act:
 	curl https://raw.githubusercontent.com/nektos/act/master/install.sh | bash
+
+my_usb_extract:
+	bin/syz-extract -os linux -arch amd64 -sourcedir /home/ilya/linux/linux-stable/ vusb.txt
+	$(MAKE) generate
+
+create_exec: executor all
+	rm -rf workdir
+
+fuzzing_start:
+	./bin/syz-manager -config manager.cfg
+

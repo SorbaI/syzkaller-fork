@@ -79,6 +79,8 @@ var linuxSyscallChecks = map[string]func(*checkContext, *prog.Syscall) string{
 	"syz_usb_control_io":          linuxCheckUSBEmulation,
 	"syz_usb_ep_write":            linuxCheckUSBEmulation,
 	"syz_usb_ep_read":             linuxCheckUSBEmulation,
+	"syz_usb_connect_uac":         linuxCheckUSBEmulation,
+	"syz_usb_connect_uvc":         linuxCheckUSBEmulation,
 	"syz_kvm_setup_cpu":           linuxSyzKvmSetupCPUSupported,
 	"syz_kvm_vgic_v3_setup":       linuxSyzSupportedOnArm64,
 	"syz_kvm_setup_syzos_vm":      linuxSyzSupportedOnArm64,

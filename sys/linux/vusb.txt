@@ -16,6 +16,8 @@ include <linux/interrupt.h>
 include <linux/usb/cdc_ncm.h>
 include <drivers/net/usb/asix.h>
 
+include <uapi/linux/usb/video.h>
+
 # This is a special fd for USB fuzzing and should only be used with syz_usb_* pseudo-syscalls.
 # We don't inherit it from the fd resource, to discourage syzkaller calling raw ioctls on it.
 resource fd_usb[int32]: -1
@@ -1059,6 +1061,9 @@ usb_cdc_ncm_ntb_parameters {
 resource fd_usb_uac1[fd_usb]
 
 syz_usb_connect$uac1(speed flags[usb_device_speed], dev_len len[dev], dev ptr[in, usb_device_descriptor_uac1], conn_descs ptr[in, vusb_connect_descriptors]) fd_usb_uac1 (timeout[3000], prog_timeout[3000], remote_cover)
+
+syz_usb_connect_uac(speed flags[usb_device_speed], dev_len len[dev], dev ptr[in, usb_device_descriptor_uac1], conn_descs ptr[in, vusb_connect_descriptors], need_correction const[1]) fd_usb_uac1 (timeout[3000], prog_timeout[3000], remote_cover)
+
 syz_usb_control_io$uac1(fd fd_usb_uac1, descs ptr[in, vusb_descriptors_uac1], resps ptr[in, vusb_responses_uac1]) (timeout[300], remote_cover)
 
 usb_device_descriptor_uac1 {
@@ -1119,7 +1124,7 @@ uac1_ac_header_descriptor_2 {
 	bDescriptorSubType	const[UAC_HEADER, int8]
 
 	bcdADC			int16
-	wTotalLength		int8
+	wTotalLenght		int16
 	bInCollection		const[F_AUDIO_NUM_INTERFACES, int8]
 
 # These must match interfaces numbers.
@@ -1438,3 +1443,398 @@ htc_frame_flags = HTC_FLAGS_RECV_TRAILER
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+syz_usb_connect$uvc(speed flags[usb_device_speed], dev_len len[dev], dev ptr[in, usb_device_descriptor_uvc], conn_descs ptr[in, vusb_connect_descriptors]) fd_usb (timeout[3000], prog_timeout[3000])
+
+syz_usb_connect_uvc(speed flags[usb_device_speed], dev_len len[dev], dev ptr[in, usb_device_descriptor_uvc], conn_descs ptr[in, vusb_connect_descriptors],need_correction const[1]) fd_usb (timeout[3000], prog_timeout[3000])
+
+# Описание USB Device Descriptor для UVC устройств
+
+define USB_SUBCLASS_IAD	0x02
+define USB_PROTOCOL_IAD	0x01
+
+usb_device_descriptor_uvc {
+	inner	usb_device_descriptor_t[USB_CLASS_MISC, USB_SUBCLASS_IAD, USB_PROTOCOL_IAD, 0x30c9, 0x42, 0x3, usb_config_descriptor_uvc]
+} [packed]
+
+# Описание USB Configuration Descriptor для UVC устройств
+
+usb_config_descriptor_uvc {
+	inner	usb_config_descriptor_t[const[0x1, int8], const[0x2, int8], uvc_interfaces]
+} [packed]
+
+uvc_interfaces {
+	first	uvc_interface_association_descriptor
+	second	uvc_control_interface_descriptor
+	third	uvc_streaming_interface_descriptor
+} [packed]
+
+type usb_interface_association_descriptor_t[FIF, ICNT, CLASS, SUBCLASS, PROTOCOL, IFUN] {
+	bLength			const[USB_DT_INTERFACE_ASSOCIATION_SIZE, int8]
+	bDescriptorType		const[USB_DT_INTERFACE_ASSOCIATION, int8]
+
+	bFirstInterface		const[FIF, int8]
+	bInterfaceCount		const[ICNT, int8]
+	bFunctionClass		const[CLASS, int8]
+	bFunctionSubClass	const[SUBCLASS, int8]
+	bFunctionProtocol	const[PROTOCOL, int8]
+	iFunction		IFUN
+} [packed]
+
+uvc_interface_association_descriptor {
+	inner	usb_interface_association_descriptor_t[0, 0x2, USB_CLASS_VIDEO, UVC_SC_VIDEO_INTERFACE_COLLECTION, UVC_PC_PROTOCOL_UNDEFINED, int8]
+} [packed]
+
+# Описание Control Interface Descriptor
+uvc_control_interface_descriptor {
+	inner	usb_interface_descriptor_eps_array_t[const[0, int8], const[0, int8], const[USB_CLASS_VIDEO, int8], const[UVC_SC_VIDEOCONTROL, int8], const[UVC_PC_PROTOCOL_UNDEFINED, int8], uvc_structure_of_vc_desc, array[uvc_control_endpoint_descriptor, 1]]
+} [packed]
+
+define UVC_MAX_CONTROL_GRAPH_SIZE 6
+define UVC_MAX_INPUTS 3
+
+uvc_structure_of_vc_desc {
+	vc_header		uvc_vc_header_descriptor
+	#UVC_MAX_CONTROL_GRAPH_SIZE
+	vc_control_units array[uvc_vc_union_descriptor,2:6]
+} [packed]
+
+uvc_vc_union_descriptor [
+	camera_terminal uvc_vc_camera_terminal_descriptor
+	input_terminal  uvc_vc_input_terminal_descriptor
+	processing_unit	uvc_vc_processing_unit_descriptor
+	selector_unit	uvc_vc_selector_unit_descriptor
+	extension_unit	uvc_vc_extension_unit_descriptor
+	output_terminal	uvc_vc_output_terminal_descriptor
+] [varlen]
+
+bcdUVC = 0x150
+
+uvc_vc_header_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VC_HEADER, int8]
+	bcdUVC			flags[bcdUVC, int16]
+	wTotalLength		len[uvc_structure_of_vc_desc, int16]
+	dwClockFrequency	int32
+	bInCollection		const[0x1, int8] 
+	#Now low support
+	#The number of VideoStreaming interfaces in the Video Interface Collection 
+	#to which this VideoControl interface belongs
+	baInterfaceNr		const[0x1, int8] 
+} [packed]
+
+#TODO: Check all terminal types vendor specific, media
+USB_Input_Terminal_Types =  UVC_TT_STREAMING
+
+USB_Output_Terminal_Types = UVC_TT_STREAMING,UVC_OTT_DISPLAY
+
+type unitID const[0,int8]
+
+uvc_vc_input_terminal_descriptor {
+	bLength				len[parent, int8]
+	bDescriptorType			const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType		const[UVC_VC_INPUT_TERMINAL, int8]
+	#Will change in pseudo-syscall
+	bTerminalID			unitID
+	wTerminalType			flags[USB_Input_Terminal_Types, int16]
+	#Now not supported
+	bAssocTerminal			unitID
+	iTerminal			int8
+} [packed]
+
+uvc_vc_output_terminal_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VC_OUTPUT_TERMINAL, int8]
+	bTerminalID		unitID
+	wTerminalType		flags[USB_Output_Terminal_Types, int16]
+	#Now not support
+	bAssocTerminal		const[0x0, int8]
+	bSourceID		unitID
+	iTerminal		int8
+} [packed]
+
+uvc_vc_camera_terminal_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VC_INPUT_TERMINAL, int8]
+	bTerminalID		unitID
+	wTerminalType		const[UVC_ITT_CAMERA, int16]
+	#Now not Support
+	bAssocTerminal		const[0x0, int8]
+	iTerminal 			int8
+	#TODO: ADD Support In pseudo-syscall max > min
+	wObjectiveFocalLengthMin int16
+	wObjectiveFocalLengthMax int16
+	wOcularFocalLength	int16
+	bControlSize	bytesize[bmControls,int8]
+	bmControls 		array[int8, 3]
+} [packed]
+
+uvc_vc_selector_unit_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VC_SELECTOR_UNIT, int8]
+	bUnitID			unitID
+	bNrInPins		bytesize[baSourceID, int8]
+	#UVC_MAX_INPUTS
+	baSourceID		array[unitID, 1:3]
+	iSelector		int8
+} [packed]
+
+uvc_vc_processing_unit_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VC_PROCESSING_UNIT, int8]
+	bUnitID			unitID
+	bSourceID 		unitID
+	wMaxMultiplier		int16
+	bControlSize		bytesize[bmControls, int8]
+	bmControls		array[int8, 3]
+	iProcessing		int8
+	bmVideoStandarts	int8:6
+} [packed]
+
+
+uvc_vc_extension_unit_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VC_EXTENSION_UNIT, int8]
+	bUnitID			unitID
+	#TODO: Add flags for guid
+	guidExtensionCode array [int64,2]
+	#TODO?
+	bNumControls		int8
+
+	bNrInPins		bytesize[baSourceID, int8]
+	#UVC_MAX_INPUTS
+	baSourceID		array[unitID, 1:3]
+	bControlSize		bytesize[bmControls, int8]
+	bmControls		array[int8, 1:4]
+	iExtension		int8
+} [packed]
+
+# TODO: uvc_vc_enconding_unit NOW NOT SUPPORTED BY pseudo-syscall
+
+endpoint_addreess_in = 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87
+
+type usb_non_audio_endpoint_descriptor[ADDR,ATTRS,PSIZE,INTR,EXTRA] {
+	bLenght const[USB_DT_ENDPOINT_SIZE,int8]
+	bDescriptorType const[USB_DT_ENDPOINT,int8]
+	bEndpointAddress ADDR
+	bmAttributes ATTRS
+	wMaxPacketSize PSIZE
+	bInterval INTR
+	extra EXTRA
+} [packed]
+
+
+# Описание Control Endpoint Descriptor ???
+uvc_control_endpoint_descriptor {
+	inner usb_non_audio_endpoint_descriptor[flags[endpoint_addreess_in, int8], const[USB_ENDPOINT_XFER_INT, int8], flags[usb_endpoint_max_packet_sizes, int16], int8,uvc_vc_interrupt_endpoint_descriptor]
+} [packed]
+
+uvc_vc_interrupt_endpoint_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_ENDPOINT, int8]
+	bDescriptorSubType	const[UVC_EP_INTERRUPT, int8]
+	#TODO: flags for sizes
+	wMaxTransferSize	int16
+} [packed]
+
+# Описание Streaming Interface Descriptor
+#TODO: Endpoints for altsettings 0 haven't endpoints. Use this field for altsettings
+#UVC 1.1 UNDEFINED
+interface_streaming_protocols = UVC_PC_PROTOCOL_UNDEFINED
+
+type usb_interface_descriptor_fixed_streaming_uvc[IFNUM,EXTRA,ALTSETTINGS] usb_interface_descriptor_verbose_t[IFNUM,const[0,int8],const[0,int8],const[USB_CLASS_MISC,int8], const[UVC_SC_VIDEOSTREAMING, int8], flags[interface_streaming_protocols, int8], int8, EXTRA, ALTSETTINGS]
+
+#TODO: More altsettings, 
+uvc_streaming_interface_descriptor {
+	inner	usb_interface_descriptor_fixed_streaming_uvc[const[1, int8], uvc_streaming_full_descriptor, uvc_streaming_altsettings]
+} [packed]
+
+uvc_streaming_full_descriptor {
+	header	uvc_vs_input_header_descriptor
+	format1 uvc_vs_union_format_descriptor[1]
+	format2 uvc_vs_union_format_descriptor[2]	(if[value[header:bNumFormats] != 1])
+	format3 uvc_vs_union_format_descriptor[3]	(if[value[header:bNumFormats] == 3])
+} [packed]
+
+# TODO!!!:ADD OUTPUT HEADER DESCRIPTOR and formats
+type uvc_vs_union_format_descriptor [INDEX] [
+	uncompressed	uvc_vs_format_uncompressed_descriptor[INDEX] 
+	mjpeg 			uvc_vs_format_mjpeg_descriptor[INDEX]
+	dv 				uvc_vs_format_dv_descriptor[INDEX]
+] [varlen]
+
+type uvc_vs_format_dv_descriptor[INDEX] {
+	bLenght len[parent,int8]
+	bDescriptorType const[USB_DT_CS_INTERFACE,int8]
+	bDescriptorSubtype const[UVC_VS_FORMAT_DV,int8]
+	bFormatIndex const[INDEX,int8]
+	dwMaxVideoFrameBufferSize 	int32
+	bFormatType	int8[0:3]
+} [packed]
+
+uvc_vs_input_header_descriptor {
+	bLength			len[parent, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VS_INPUT_HEADER, int8]
+	bNumFormats		int8[1:3]
+	wTotalLength		len[uvc_streaming_full_descriptor, int16]
+	bEndpointAddress	flags[endpoint_addreess_in, int8]
+	bmInfo			int8[0:1]
+	#TODO!!!: ID of Output Terminal in VC, Support it in correction
+	bTerminalLink		unitID
+	bStillCaptureMethod	int8[1:3]
+	bTriggerSupport		int8[0:1]
+	bTriggerUsage		int8[0:1]
+	#bControlSize can be more 1
+	bControlSize		const[0x01,int8]
+	bmaControls		int8 
+	bmaControls2	int8	(if[value[bNumFormats] != 1])
+	bmaControls3	int8 	(if[value[bNumFormats] == 3])
+} [packed]
+
+bpp_values = 0, 1, 2, 3, 4, 5, 6, 8, 12, 16, 18, 24, 30, 32, 48
+# guids from include <drivers/media/usb/uvc/uvcvideo.h>
+
+type uvc_guid_format[STR] {
+	str stringnoz[STR]
+	padding1 const[0x00001000800000aa, int64be]
+	padding2 const[0x00389b71, int32be]
+}[packed]
+
+#TODO all comment formats
+format_guid [
+	mjpeg uvc_guid_format["MJPG"]
+	yuy2  uvc_guid_format["YUY2"]
+	#yuy2_isight
+	nv12  uvc_guid_format["NV12"]
+	yv12  uvc_guid_format["YV12"]
+	i420  uvc_guid_format["I420"]
+	uyvy  uvc_guid_format["UYVY"]
+	y800  uvc_guid_format["Y800"]
+	y8    uvc_guid_format["Y8  "]
+	y10   uvc_guid_format["Y10 "]
+	y12   uvc_guid_format["Y12 "]
+	y16   uvc_guid_format["Y16 "]
+	by8   uvc_guid_format["BY8 "]
+	ba81  uvc_guid_format["BA81"]
+	gbrg  uvc_guid_format["GBRG"]
+	grbg  uvc_guid_format["GRBG"]
+	rggb  uvc_guid_format["RGGB"]
+	bg16  uvc_guid_format["BG16"]
+	gb16  uvc_guid_format["GB16"]
+	rg16  uvc_guid_format["RG16"]
+	gr16  uvc_guid_format["GR16"]
+	rgbp  uvc_guid_format["RGBP"]
+	#bgr3
+	m420  uvc_guid_format["M420"]
+	h264  uvc_guid_format["H264"]
+	y8i   uvc_guid_format["Y8I "]
+	y12i  uvc_guid_format["Y12I"]
+	z16   uvc_guid_format["Z16 "]
+	rw10  uvc_guid_format["RW10"]
+	#invz inzi invi
+	cnf4 uvc_guid_format["CNF4"]
+	#d3dfmt_l8 uvc_guid_format[0x32000000]
+	#ksmedia_l8_ir 
+	hevc  uvc_guid_format["HEVC"]
+] [size[16]]
+
+type uvc_vs_format_uncompressed_descriptor[INDEX] {
+	bLength			const[UVC_DT_FORMAT_UNCOMPRESSED_SIZE, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VS_FORMAT_UNCOMPRESSED, int8]
+	bFormatIndex		const[INDEX, int8]
+	bNumFrameDescriptors	int8[1:3]
+	guidFormat		format_guid
+	bBitsPerPixel		flags[bpp_values, int8]
+	bDefaultFrameIndex	const[0x1, int8]
+
+	bAspectRatioX		int8[0:20]
+	bAspectRatioY		int8[0:20]
+	bmInterlaceFlags	int8:6
+	bCopyProtect		const[0x0, int8]
+	frame1			uvc_vs_frame_descriptor[1,UVC_VS_FRAME_UNCOMPRESSED]
+	frame2			uvc_vs_frame_descriptor[2,UVC_VS_FRAME_UNCOMPRESSED]	(if[value[bNumFrameDescriptors] != 1])
+	frame3			uvc_vs_frame_descriptor[3,UVC_VS_FRAME_UNCOMPRESSED]	(if[value[bNumFrameDescriptors] == 3])
+	#Required 
+	colorformat uvc_vs_colorformat_descriptor
+} [packed]
+
+type uvc_vs_format_mjpeg_descriptor[INDEX] {
+	bLength len[parent,int8]
+	bDescriptorType const[USB_DT_CS_INTERFACE,int8]
+	bDescriptorSubType const[UVC_VS_FORMAT_MJPEG,int8]
+	bFormatIndex const[INDEX,int8]
+	bNumFrameDescriptors int8[1:3]
+	bmFlags int8[0:1]
+	bDefaultFrameIndex const[0x01,int8]
+	bAspectRatioX int8[0:20]
+	bAspectRatioY int8[0:20]
+	bmInterlaceFlags int8:6
+	bCopyProtect int8[0:1]
+	frame1 uvc_vs_frame_descriptor[1,UVC_VS_FRAME_MJPEG]
+	frame2 uvc_vs_frame_descriptor[2,UVC_VS_FRAME_MJPEG] (if[value[bNumFrameDescriptors] != 1])
+	frame3 uvc_vs_frame_descriptor[3,UVC_VS_FRAME_MJPEG] (if[value[bNumFrameDescriptors] == 3])
+	#Required
+	colorformat uvc_vs_colorformat_descriptor
+} [packed]
+
+uvc_vs_colorformat_descriptor {
+	bLength			const[UVC_DT_COLOR_MATCHING_SIZE, int8]
+	bDescriptorType		const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType	const[UVC_VS_COLORFORMAT, int8]
+	bColorPrimaries		int8[0:5]
+	bTransferCharacteristics	int8[0:7]
+	bMatrixCoefficients	int8[0:5]
+}[packed]
+
+wWidth_values = 160, 320, 640, 800, 1024, 1280, 1600, 1920, 2048, 2560, 3200, 3840, 4096, 5120, 6400, 7680
+wHeight_values = 120, 240, 480, 600, 720, 768, 960, 1024, 1080, 1200, 1440, 2160, 4320
+
+type uvc_vs_frame_descriptor[INDEX,FRAME] {
+	bLength				len[parent, int8]
+	bDescriptorType			const[USB_DT_CS_INTERFACE, int8]
+	bDescriptorSubType		const[FRAME, int8]
+	bFrameIndex			const[INDEX, int8]
+	bmCapabilities			int8:2
+	wWidth				flags[wWidth_values, int16]
+	wHeight				flags[wHeight_values, int16]
+	dwMinBitRate			int32
+	dwMaxBitRate			int32
+	dwMaxVideoFrameBufferSize	int32
+	dwDefaultFrameInterval		int32
+	bFrameIntervalType		int8[0:3]
+	#Continuous Frame Intervals 
+	dwMinFrameInterval int32 (if[value[bFrameIntervalType] == 0])
+	dwMaxFrameInterval int32 (if[value[bFrameIntervalType] == 0])
+	dwFrameIntervalStep int32 (if[value[bFrameIntervalType] == 0])
+
+	#DiscreteFrameInterval
+	dwFrameInterval1		int32	(if[value[bFrameIntervalType] != 0])
+	dwFrameInterval2		int32	(if[(value[bFrameIntervalType] != 1) & (value[bFrameIntervalType] != 0)])
+	dwFrameInterval3 		int32   (if[value[bFrameIntervalType] == 3])
+} [packed]
+
+# Описание Streaming Endpoint Descriptor
+
+
+
+uvc_streaming_altsettings {
+	altsetting1 uvc_streaming_altsetting[1]
+	altsetting2 optional[uvc_streaming_altsetting[2]]
+} [packed]
+
+type uvc_streaming_altsetting[ALTNUM] usb_interface_descriptor_eps_array_t[const[1,int8],const[ALTNUM,int8],const[USB_CLASS_MISC, int8], const[UVC_SC_VIDEOSTREAMING, int8], const[UVC_PC_PROTOCOL_UNDEFINED, int8], void, uvc_streaming_endpoint_descriptor]
+
+#TODO:Add bulk descriptors
+define UVC_VS_ENDPOINT_ATTR (USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC)
+uvc_streaming_endpoint_descriptor {
+	inner usb_non_audio_endpoint_descriptor[flags[endpoint_addreess_in, int8], const[UVC_VS_ENDPOINT_ATTR, int8], flags[usb_endpoint_max_packet_sizes, int16], int8,void]
+} [packed]
+

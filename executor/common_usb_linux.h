@@ -405,7 +405,46 @@ static volatile long syz_usb_connect_impl(uint64 speed, uint64 dev_len, const ch
 
 #endif // #if SYZ_EXECUTOR || __NR_syz_usb_connect || __NR_syz_usb_connect_ath9k
 
+#if SYZ_EXECUTOR || __NR_syz_usb_connect_uac
+
+#include "usb_controlgraph_corr.h"
+
+static volatile long syz_usb_connect_uac(volatile long a0, volatile long a1, volatile long a2, volatile long a3, volatile long a4)
+{
+	uint64 speed = a0;
+	uint64 dev_len = a1;
+	char* ptr = (char*)a2;
+	if ((uint64)a4 == 1) {
+		dev_len = graphCorrection(dev_len, (char*)ptr, USB_CLASS_AUDIO);
+	}
+	const char* dev = ptr;
+	const struct vusb_connect_descriptors* descs = (const struct vusb_connect_descriptors*)a3;
+
+	return syz_usb_connect_impl(speed, dev_len, dev, descs, &lookup_connect_response_out_generic);
+}
+#endif // SYZ_EXECUTOR || __NR_syz_usb_connect_uac
+
+#if SYZ_EXECUTOR || __NR_syz_usb_connect_uvc
+
+#include "usb_controlgraph_corr.h"
+
+static volatile long syz_usb_connect_uvc(volatile long a0, volatile long a1, volatile long a2, volatile long a3, volatile long a4)
+{
+	uint64 speed = a0;
+	uint64 dev_len = a1;
+	char* ptr = (char*)a2;
+	if ((uint64)a4 == 1) {
+		dev_len = graphCorrection(dev_len, (char*)ptr, USB_CLASS_VIDEO);
+	}
+	const char* dev = ptr;
+	const struct vusb_connect_descriptors* descs = (const struct vusb_connect_descriptors*)a3;
+
+	return syz_usb_connect_impl(speed, dev_len, dev, descs, &lookup_connect_response_out_generic);
+}
+#endif // SYZ_EXECUTOR || __NR_syz_usb_connect_uvc
+
 #if SYZ_EXECUTOR || __NR_syz_usb_connect
+
 static volatile long syz_usb_connect(volatile long a0, volatile long a1, volatile long a2, volatile long a3)
 {
 	uint64 speed = a0;
