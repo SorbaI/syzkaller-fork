@@ -601,6 +601,25 @@ func (r *randGen) generateCall(s *state, p *Prog, insertionPoint int) []*Call {
 	return r.generateParticularCall(s, meta)
 }
 
+
+func (r *randGen) allocMemPtrs(c *Call, s *state) {
+	ForeachArg(c,func(arg Arg, argCtx *ArgCtx){
+		if r.target.isAnyPtr(arg.Type()) {
+			argCtx.Stop = true
+			return
+		}
+		ptrArg, ok := arg.(*PointerArg)
+		if !ok || ptrArg.Res == nil{
+			return
+		}
+		data:= ptrArg.Res;
+		if data == nil {
+			panic("nil pointer data arg")
+		}
+		ptrArg.Address = s.ma.alloc(r,data.Size(),data.Type().Alignment());
+	})
+}
+
 func (r *randGen) generateParticularCall(s *state, meta *Syscall) (calls []*Call) {
 	if meta.Attrs.Disabled {
 		panic(fmt.Sprintf("generating disabled call %v", meta.Name))
@@ -612,6 +631,7 @@ func (r *randGen) generateParticularCall(s *state, meta *Syscall) (calls []*Call
 	c.Args, calls = r.generateArgs(s, meta.Args, DirIn)
 	moreCalls, _ := r.patchConditionalFields(c, s)
 	r.target.assignSizesCall(c)
+	r.allocMemPtrs(c, s)
 	return append(append(calls, moreCalls...), c)
 }
 
@@ -916,7 +936,8 @@ func (a *PtrType) generate(r *randGen, s *state, dir Dir) (arg Arg, calls []*Cal
 		return MakeSpecialPointerArg(a, dir, index), nil
 	}
 	inner, calls := r.generateArg(s, a.Elem, a.ElemDir)
-	arg = r.allocAddr(s, a, dir, inner.Size(), inner)
+	// Alloc Memory After patchConditionalFields
+	arg = MakePointerArg(a, dir, 0, inner)
 	return arg, calls
 }
 
